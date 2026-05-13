@@ -1,0 +1,64 @@
+# --- BACKEND SPECIFIC ---
+
+# Biến môi trường (CỰC KỲ QUAN TRỌNG)
+# Chứa thông tin nhạy cảm như MongoDB URI, JWT Secret, API Keys
+.env
+.env.test
+.env.production
+*.env.local
+
+# Dữ liệu cục bộ của MongoDB (Nếu bạn chạy Mongo locally và lưu dữ liệu trong thư mục dự án)
+/data/db
+*.log
+*.sqlite
+
+# Bản sao lưu dữ liệu (Database dumps)
+dump/
+/backups
+
+# Thư mục lưu trữ file upload của người dùng
+# Thường bạn không muốn lưu ảnh/video người dùng upload lên Git
+public/uploads/
+storage/
+uploads/
+
+# Các tệp định danh quy trình (Process IDs)
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Thư mục Testing & Coverage (Ví dụ dùng Jest, Mocha, Supertest)
+/coverage
+.nyc_output
+
+# Cấu hình IDE & Công cụ chạy server
+.vscode/
+.idea/
+.nvmrc
+.eslintcache
+
+# Thư mục Build (Nếu bạn viết bằng TypeScript)
+/dist
+/build
+
+# --- DEPENDENCIES & PACKAGE MANAGERS ---
+
+# Thư mục chứa toàn bộ thư viện (CỰC NẶNG - BẮT BUỘC PHẢI IGNORE)
+node_modules/
+jspm_packages/
+
+# TypeScript: Nếu các thư viện sinh ra tệp định nghĩa tạm thời
+typings/
+
+# Các thư mục bộ nhớ đệm của trình quản lý gói
+.npm/
+.eslintcache
+.node-gyp/
+
+# Nếu bạn dùng Yarn Berry (PnP)
+.pnp.*
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
