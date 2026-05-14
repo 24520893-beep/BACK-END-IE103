@@ -9,6 +9,11 @@ const CauHoiSchema = new mongoose.Schema({
   },
   TrangThai: { type: String, default: "Đang kiểm duyệt" },
   NoiDungCauHoi: { type: String, required: true },
+  
+  // ĐÃ SỬA: Loại bỏ default. 
+  // Nếu không upload ảnh, field này sẽ KHÔNG tồn tại trong DB.
+  HinhAnhMinhHoa: { type: String },
+
   MonHoc: { type: String },
   ChuyenDe: { type: String },
   DoKho: { type: String },
@@ -16,7 +21,7 @@ const CauHoiSchema = new mongoose.Schema({
   MaGVBienSoan: { type: mongoose.Schema.Types.ObjectId, ref: 'NguoiDung' },
   MaNguoiKiemDuyet: { type: mongoose.Schema.Types.ObjectId, ref: 'NguoiDung' },
   
-  // Các trường đặc thù (Loại bỏ default để tối ưu dung lượng)
+  // Các trường đặc thù
   DanhSachLuaChon: [{ type: String }], 
   DapAnChinhXac: { type: String },     
   DapAnGoiY: { type: String }          

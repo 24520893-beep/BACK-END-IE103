@@ -1,7 +1,10 @@
 const TaiLieuHocTap = require('../models/TaiLieuHocTap');
 const mongoose = require('mongoose');
 
-// ... (Các phần import giữ nguyên)
+// ==========================================
+// 1. CÁC HÀM XỬ LÝ THÙNG RÁC
+// ==========================================
+
 exports.getTrash = async (req, res) => {
     try {
         const currentUser = req.user;
@@ -38,7 +41,6 @@ exports.getTrash = async (req, res) => {
     }
 };
 
-// 2. KHÔI PHỤC DỮ LIỆU
 exports.restore = async (req, res) => {
     try {
         const currentUser = req.user;
@@ -61,7 +63,6 @@ exports.restore = async (req, res) => {
     }
 };
 
-// 3. XÓA VĨNH VIỄN
 exports.forceDelete = async (req, res) => {
     try {
         const currentUser = req.user;
@@ -83,6 +84,11 @@ exports.forceDelete = async (req, res) => {
     }
 };
 
+
+// ==========================================
+// 2. CÁC HÀM XỬ LÝ DỮ LIỆU CHÍNH
+// ==========================================
+
 exports.getAll = async (req, res) => {
   try {
     const currentUser = req.user;
@@ -98,7 +104,7 @@ exports.getAll = async (req, res) => {
     if (format && format !== 'Tất cả') filter.DinhDang = format;
     if (subject && subject !== 'Tất cả') filter.MonHoc = subject;
 
-    // Logic phân quyền (Giữ nguyên)
+    // Logic phân quyền
     if (currentUser.VaiTro === 'HocSinh') {
       filter.TrangThai = { $in: ['Đã xuất bản', 'Hoàn thiện'] };
     } else {
@@ -140,7 +146,7 @@ exports.getAll = async (req, res) => {
           }
         }
       },
-      // THAY ĐỔI Ở ĐÂY: Sắp xếp theo "Của tôi" -> "Trạng thái ưu tiên" -> "Ngày mới nhất"
+      // Sắp xếp theo "Của tôi" -> "Trạng thái ưu tiên" -> "Ngày mới nhất"
       { $sort: { ownPriority: 1, sortPriority: 1, NgayTao: -1 } },
 
       { $skip: (page - 1) * limit },
@@ -166,38 +172,47 @@ exports.getAll = async (req, res) => {
     ]);
 
     res.json({ data: items, totalItems, totalPages: Math.ceil(totalItems / limit), currentPage: page });
-  } catch (error) { res.status(500).json({ error: error.message }); }
+  } catch (error) { 
+    res.status(500).json({ error: error.message }); 
+  }
 };
 
 exports.getById = async (req, res) => {
-  const item = await TaiLieuHocTap.findById(req.params.id)
-    .populate('DanhSachNhanDan', 'TenNhanDan')
-    .populate('MaGVDangTai', 'HoTen');
-  res.json(item);
+  try {
+    const item = await TaiLieuHocTap.findById(req.params.id)
+      .populate('DanhSachNhanDan', 'TenNhanDan')
+      .populate('MaGVDangTai', 'HoTen');
+    res.json(item);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
 exports.create = async (req, res) => {
   try {
-    const {
-      TenTaiLieu, DinhDang, DuongDan, MonHoc, DanhSachNhanDan
-    } = req.body;
+    // Dữ liệu gửi qua FormData dạng mảng/object sẽ bị ép thành chuỗi (String)
+    const { TenTaiLieu, DinhDang, MonHoc, DanhSachNhanDan } = req.body;
 
     const docData = {
       TenTaiLieu,
-      MaGVDangTai: req.user?._id
+      MaGVDangTai: req.user?._id,
+      DinhDang,
+      MonHoc
     };
 
-    if (DinhDang) docData.DinhDang = DinhDang;
-    if (DuongDan) docData.DuongDan = DuongDan;
-    if (MonHoc) docData.MonHoc = MonHoc;
+    // NẾU CÓ UPLOAD FILE, CLOUDINARY TRẢ LINK VỀ QUA req.file.path
+    if (req.file) {
+      docData.DuongDan = req.file.path;
+    }
 
-    if (DanhSachNhanDan && DanhSachNhanDan.length > 0) {
-      docData.DanhSachNhanDan = DanhSachNhanDan;
+    // Parse lại chuỗi JSON của mảng nhãn dán
+    if (DanhSachNhanDan && typeof DanhSachNhanDan === 'string') {
+      docData.DanhSachNhanDan = JSON.parse(DanhSachNhanDan);
     }
 
     const item = new TaiLieuHocTap(docData);
     await item.save();
-
+    
     res.status(201).json(item);
   } catch (error) {
     res.status(400).json({ message: "Lỗi đăng tải tài liệu", error: error.message });
@@ -210,6 +225,16 @@ exports.update = async (req, res) => {
     const updateData = { ...req.body };
 
     delete updateData.MaGVDangTai;
+
+    // BẮT LẠI FILE NẾU NGƯỜI DÙNG UPLOAD FILE MỚI KHI UPDATE
+    if (req.file) {
+      updateData.DuongDan = req.file.path;
+    }
+
+    // PARSE LẠI CHUỖI TAGS KHI GỬI BẰNG FORMDATA
+    if (updateData.DanhSachNhanDan && typeof updateData.DanhSachNhanDan === 'string') {
+      updateData.DanhSachNhanDan = JSON.parse(updateData.DanhSachNhanDan);
+    }
 
     const updateQuery = { $set: updateData };
 
@@ -239,6 +264,7 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
+    // Soft delete do thư viện mongoose-delete cung cấp
     await TaiLieuHocTap.deleteById(req.params.id, req.user._id);
     res.json({ message: 'Deleted' });
   } catch (error) {

@@ -11,6 +11,11 @@ const NguoiDungSchema = new mongoose.Schema({
     required: true 
   },
 
+  Avatar: { 
+    type: String, 
+    default: "https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg" // Có thể để link ảnh mặc định tạm thời hoặc để chuỗi rỗng ""
+  },
+
   // Loại bỏ default để trường này không tồn tại nếu không có dữ liệu
   MonHoc: { type: String }, 
 

@@ -11,8 +11,6 @@ exports.getMe = async (req, res) => {
   res.json(user);
 };
 
-// Thêm hàm này vào controllers/nguoidung.controller.js
-
 exports.getHocSinhs = async (req, res) => {
   try {
     // 1. Tìm tất cả người dùng có VaiTro là 'HocSinh'
@@ -24,14 +22,13 @@ exports.getHocSinhs = async (req, res) => {
     res.status(200).json(students);
   } catch (error) {
     console.error("Lỗi khi lấy danh sách học sinh:", error);
-    res.status(500).json({ 
-      message: 'Lỗi máy chủ khi tải danh sách học sinh', 
-      error: error.message 
+    res.status(500).json({
+      message: 'Lỗi máy chủ khi tải danh sách học sinh',
+      error: error.message
     });
   }
 };
 
-// Cập nhật trong controllers/nguoidung.controller.js
 exports.getGiaoViens = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -73,9 +70,9 @@ exports.getGiaoViens = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
-    const { 
-      HoTen, Email, MatKhau, VaiTro, 
-      MonHoc, KhoiThi, DiemKyVong, TruongKyVong 
+    const {
+      HoTen, Email, MatKhau, VaiTro,
+      MonHoc, KhoiThi, DiemKyVong, TruongKyVong
     } = req.body;
 
     // 1. Khởi tạo các trường dùng chung mà ai cũng phải có
@@ -87,10 +84,7 @@ exports.create = async (req, res) => {
     };
 
     // 2. Chỉ thêm trường đặc thù dựa trên VaiTro
-    
     if (MonHoc) userData.MonHoc = MonHoc;
-    
-    
 
     // 3. Tạo instance và lưu (Chỉ chứa các trường đã được thêm ở trên)
     const user = new NguoiDung(userData);
@@ -109,21 +103,21 @@ exports.create = async (req, res) => {
 exports.signUp = async (req, res) => {
   try {
     // 1. Nhận dữ liệu từ Front-end gửi lên
-    const { 
-      HoTen, 
-      Email, 
-      MatKhau, 
+    const {
+      HoTen,
+      Email,
+      MatKhau,
       KhoiThiMucTieu, // Nhận tên biến theo đúng payload Front-end
       KhoiThi,        // Dự phòng nếu truyền chuẩn tên Schema
-      DiemKyVong, 
-      TruongKyVong 
+      DiemKyVong,
+      TruongKyVong
     } = req.body;
 
     // 2. Kiểm tra xem Email đã tồn tại trong hệ thống chưa
     const existingUser = await NguoiDung.findOne({ Email });
     if (existingUser) {
-      return res.status(400).json({ 
-        message: "Email này đã được đăng ký. Vui lòng sử dụng email khác hoặc đăng nhập." 
+      return res.status(400).json({
+        message: "Email này đã được đăng ký. Vui lòng sử dụng email khác hoặc đăng nhập."
       });
     }
 
@@ -141,7 +135,7 @@ exports.signUp = async (req, res) => {
 
     // 5. Thêm các trường mục tiêu học tập (Chỉ thêm nếu có dữ liệu)
     // Ánh xạ KhoiThiMucTieu từ React sang KhoiThi của MongoDB
-    const khoiThiHS = KhoiThiMucTieu || KhoiThi; 
+    const khoiThiHS = KhoiThiMucTieu || KhoiThi;
     if (khoiThiHS) userData.KhoiThi = khoiThiHS;
     if (DiemKyVong) userData.DiemKyVong = DiemKyVong;
     if (TruongKyVong) userData.TruongKyVong = TruongKyVong;
@@ -154,16 +148,16 @@ exports.signUp = async (req, res) => {
     const result = newUser.toObject();
     delete result.MatKhauDaMaHoa;
 
-    res.status(201).json({ 
-      message: "Đăng ký tài khoản học sinh thành công!", 
-      data: result 
+    res.status(201).json({
+      message: "Đăng ký tài khoản học sinh thành công!",
+      data: result
     });
 
   } catch (error) {
     console.error("Lỗi đăng ký:", error);
-    res.status(500).json({ 
-      message: "Lỗi hệ thống khi đăng ký tài khoản.", 
-      error: error.message 
+    res.status(500).json({
+      message: "Lỗi hệ thống khi đăng ký tài khoản.",
+      error: error.message
     });
   }
 };
@@ -173,6 +167,15 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     let updateData = { ...req.body };
 
+    console.log("1. File nhận được: ", req.file);
+    console.log("2. Data chuẩn bị lưu: ", updateData);
+    // ==========================================
+    // XỬ LÝ ẢNH ĐẠI DIỆN TỪ CLOUDINARY
+    // ==========================================
+    if (req.file) {
+      updateData.Avatar = req.file.path; // Đường link HTTPS ảnh thực tế trả về từ Cloudinary
+    }
+    console.log("2. Dữ liệu chuẩn bị lưu vào DB:", updateData);
     // 1. Xử lý nếu người dùng muốn đổi mật khẩu
     if (updateData.MatKhau) {
       updateData.MatKhauDaMaHoa = bcrypt.hashSync(updateData.MatKhau, 10);
@@ -181,8 +184,8 @@ exports.update = async (req, res) => {
 
     // 2. Thực hiện cập nhật
     const updatedUser = await NguoiDung.findByIdAndUpdate(
-      id, 
-      { $set: updateData }, 
+      id,
+      { $set: updateData },
       { new: true, runValidators: true } // Trả về bản ghi mới và chạy kiểm tra schema
     ).select('-MatKhauDaMaHoa'); // Không trả về mật khẩu sau khi update
 
@@ -198,8 +201,10 @@ exports.update = async (req, res) => {
 };
 
 exports.remove = async (req, res) => {
-  const { id } = req.params;
-  await NguoiDung.deleteById(req.params.id, req.user._id);
-  res.json({ message: 'User deleted' });
+  try {
+    await NguoiDung.deleteById(req.params.id, req.user._id);
+    res.json({ message: 'User deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
-

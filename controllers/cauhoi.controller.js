@@ -1,7 +1,6 @@
 const CauHoi = require('../models/CauHoi');
 const mongoose = require('mongoose');
 
-// ... (Các phần import giữ nguyên)
 exports.getTrash = async (req, res) => {
     try {
         const currentUser = req.user;
@@ -126,7 +125,7 @@ exports.getAll = async (req, res) => {
           }
         }
       },
-      // THAY ĐỔI Ở ĐÂY: Ưu tiên 'Của tôi' lên đầu, sau đó mới tới 'Trạng thái'
+      // Ưu tiên 'Của tôi' lên đầu, sau đó mới tới 'Trạng thái'
       { $sort: { ownPriority: 1, sortPriority: 1, NgayTao: -1 } },
 
       { $skip: (page - 1) * limit },
@@ -159,15 +158,25 @@ exports.getById = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
-    const {
+    let {
       LoaiCauHoi, NoiDungCauHoi, MonHoc, ChuyenDe, DoKho,
       DanhSachLuaChon, DapAnChinhXac, DapAnGoiY
     } = req.body;
+
+    // 1. ÉP KIỂU LẠI MẢNG TỪ FORMDATA (CHUỖI) THÀNH JSON
+    if (DanhSachLuaChon && typeof DanhSachLuaChon === 'string') {
+        DanhSachLuaChon = JSON.parse(DanhSachLuaChon);
+    }
 
     const cauHoiData = {
       LoaiCauHoi, NoiDungCauHoi, MonHoc, ChuyenDe, DoKho,
       MaGVBienSoan: req.user?._id
     };
+
+    // 2. BẮT LINK ẢNH NẾU CÓ UPLOAD
+    if (req.file) {
+        cauHoiData.HinhAnhMinhHoa = req.file.path;
+    }
 
     switch (LoaiCauHoi) {
       case 'TracNghiem':
@@ -196,10 +205,26 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     const updateData = { ...req.body };
 
+    // 1. ÉP KIỂU LẠI MẢNG NẾU CÓ CẬP NHẬT TỪ FORMDATA
+    if (updateData.DanhSachLuaChon && typeof updateData.DanhSachLuaChon === 'string') {
+        updateData.DanhSachLuaChon = JSON.parse(updateData.DanhSachLuaChon);
+    }
+
+    // 2. CẬP NHẬT LINK ẢNH MỚI NẾU CÓ UPLOAD
+    if (req.file) {
+        updateData.HinhAnhMinhHoa = req.file.path;
+    }
+
     delete updateData.MaGVBienSoan;
 
     const updateFields = { $set: updateData };
     const unsetFields = {};
+
+    // 3. XỬ LÝ XÓA ẢNH (Nếu Front-end gửi cờ isRemoveImage)
+    if (updateData.isRemoveImage === 'true') {
+        unsetFields.HinhAnhMinhHoa = "";
+        delete updateFields.$set.HinhAnhMinhHoa; // Xóa khỏi $set để tránh xung đột
+    }
 
     if (updateData.LoaiCauHoi === 'TuLuan') {
       unsetFields.DanhSachLuaChon = "";

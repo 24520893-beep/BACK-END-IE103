@@ -1,4 +1,5 @@
 const express = require('express');
+const uploadCloud = require('../config/cloudinary');
 const router = express.Router();
 const controller = require('../controllers/tailieuhoctap.controller');
 const auth = require('../middleware/auth.middleware');
@@ -11,8 +12,8 @@ router.delete('/:id/force', auth, controller.forceDelete);
 
 router.get('/', auth, controller.getAll);
 router.get('/:id', auth, controller.getById);
-router.post('/', auth, rbac('GiaoVien', 'QuanTriVien'), controller.create);
-router.put('/:id', auth, rbac('GiaoVien', 'QuanTriVien'), controller.update);
+router.post('/', auth, rbac('GiaoVien', 'QuanTriVien'), uploadCloud.single('fileUpload'), controller.create);
+router.put('/:id', auth, rbac('GiaoVien', 'QuanTriVien'), uploadCloud.single('fileUpload'), controller.update);
 router.delete('/:id', auth, rbac('GiaoVien', 'QuanTriVien'), controller.remove);
 
 module.exports = router;
