@@ -1,9 +1,17 @@
 const LoTrinhHocTap = require('../models/LoTrinhHocTap');
+const NguoiDung = require('../models/NguoiDung'); // Bổ sung NguoiDung để lấy VaiTro thực tế
 const mongoose = require('mongoose');
+
+// ==========================================
+// THÙNG RÁC LỘ TRÌNH HỌC TẬP
+// ==========================================
 
 exports.getTrash = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Kiểm tra vai trò thực tế từ DB
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 12;
         const search = req.query.search || '';
@@ -39,7 +47,10 @@ exports.getTrash = async (req, res) => {
 
 exports.restore = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Kiểm tra vai trò thực tế từ DB
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const { id } = req.params;
 
         const item = await LoTrinhHocTap.findOneDeleted({ _id: id });
@@ -59,7 +70,10 @@ exports.restore = async (req, res) => {
 
 exports.forceDelete = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Kiểm tra vai trò thực tế từ DB
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const { id } = req.params;
 
         const item = await LoTrinhHocTap.findOneDeleted({ _id: id });
@@ -78,9 +92,14 @@ exports.forceDelete = async (req, res) => {
     }
 };
 
+// ==========================================
+// LẤY DANH SÁCH & CHI TIẾT
+// ==========================================
+
 exports.getAll = async (req, res) => {
   try {
-    const currentUser = req.user;
+    // BẢO MẬT: Kiểm tra vai trò thực tế từ DB
+    const currentUser = await NguoiDung.findById(req.user._id);
     if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
 
     const currentUserId = new mongoose.Types.ObjectId(currentUser._id);
@@ -91,21 +110,16 @@ exports.getAll = async (req, res) => {
 
     let filter = { deleted: { $ne: true } };
 
-    // ==========================================
-    // LOGIC PHÂN QUYỀN HIỂN THỊ (BẢN VÁ MỚI)
-    // ==========================================
+    // LOGIC PHÂN QUYỀN HIỂN THỊ
     if (currentUser.VaiTro === 'HocSinh') {
-        // Học sinh: Chỉ thấy lộ trình mình được gán và đã xuất bản
         filter.MaHocSinh = currentUserId;
         filter.TrangThai = { $in: ['Đã xuất bản', 'Hoàn thiện'] };
     } 
     else if (currentUser.VaiTro === 'GiaoVien') {
-        // Giáo viên: Chỉ thấy lộ trình do chính mình tạo
         filter.MaGVPhuTrach = currentUserId;
         if (status && status !== 'Tất cả') filter.TrangThai = status;
     }
     else if (currentUser.VaiTro === 'QuanTriVien') {
-        // Quản trị viên: Thấy bài mình tạo HOẶC tất cả bài đã Hoàn thiện của người khác
         filter.$or = [
             { MaGVPhuTrach: currentUserId },
             { TrangThai: { $in: ['Đã xuất bản', 'Hoàn thiện'] } }
@@ -121,7 +135,6 @@ exports.getAll = async (req, res) => {
       { $match: filter },
       {
         $addFields: {
-          // Quy tắc trạng thái: Từ chối(1) -> Chờ duyệt(2) -> Hoàn thiện chưa xong(3) -> Xong(4)
           sortPriority: {
             $switch: {
               branches: [
@@ -133,7 +146,6 @@ exports.getAll = async (req, res) => {
               default: 5
             }
           },
-          // Ưu tiên "Của tôi"
           ownPriority: {
             $cond: { if: { $eq: ["$MaGVPhuTrach", currentUserId] }, then: 1, else: 2 }
           }
@@ -172,8 +184,18 @@ exports.getById = async (req, res) => {
   res.json(item);
 };
 
+// ==========================================
+// TẠO MỚI, CẬP NHẬT, XÓA MỀM
+// ==========================================
+
 exports.create = async (req, res) => {
   try {
+    // BẢO MẬT: Kiểm tra vai trò thực tế từ DB
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro === 'HocSinh') {
+        return res.status(403).json({ message: "Từ chối truy cập. Chỉ Giáo viên hoặc Quản trị viên mới được tạo lộ trình." });
+    }
+
     const { TenLoTrinh, MonHoc, MaHocSinh, DanhSachNhiemVu, GhiChu } = req.body;
 
     if (!MaHocSinh || !DanhSachNhiemVu?.length) {
@@ -190,7 +212,7 @@ exports.create = async (req, res) => {
       TenLoTrinh,
       MonHoc,
       MaHocSinh,
-      MaGVPhuTrach: req.user._id,
+      MaGVPhuTrach: currentUser._id, // Ép cứng người tạo từ DB
       DanhSachNhiemVu: danhSachNhiemVuChuan,
       TrangThai: 'Đang kiểm duyệt',
       GhiChu: GhiChu?.trim() || ""
@@ -205,30 +227,60 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
+    // BẢO MẬT: Lấy người dùng thực tế
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser) return res.status(401).json({ message: "Không tìm thấy người dùng." });
+
     const { id } = req.params;
-    const updateData = { ...req.body };
+    const existingItem = await LoTrinhHocTap.findById(id);
     
-    if (updateData.DanhSachNhiemVu) {
-      updateData.DanhSachNhiemVu = updateData.DanhSachNhiemVu.map(comp => ({
-          LoaiNhiemVu: comp.LoaiNhiemVu === 'DeThiThu' || comp.LoaiNhiemVu === 'DeThi' ? 'DeThiThu' : 'TaiLieuHocTap', 
-          MaThamChieu: comp.MaThamChieu,
-          ThuTu: comp.ThuTu
-      }));
+    if (!existingItem) return res.status(404).json({ message: "Không tìm thấy lộ trình" });
+
+    let updateData = { ...req.body };
+
+    // TÁCH QUYỀN SỬA ĐỔI RÕ RÀNG
+    if (currentUser.VaiTro === 'HocSinh') {
+        // Học sinh chỉ được phép cập nhật Tiến độ (Mức độ hoàn thành), không được sửa nội dung
+        if (existingItem.MaHocSinh.toString() !== currentUser._id.toString()) {
+            return res.status(403).json({ message: "Bạn không có quyền cập nhật lộ trình này." });
+        }
+        updateData = { 
+            MucDoHoanThanh: updateData.MucDoHoanThanh, 
+            NhiemVuHoanThanh: updateData.NhiemVuHoanThanh 
+        };
+    } else {
+        // Giáo viên / Quản trị viên
+        if (currentUser.VaiTro !== 'QuanTriVien' && existingItem.MaGVPhuTrach.toString() !== currentUser._id.toString()) {
+            return res.status(403).json({ message: "Bạn không có quyền sửa lộ trình này." });
+        }
+        
+        // Cập nhật lại nhiệm vụ nếu có gửi lên
+        if (updateData.DanhSachNhiemVu) {
+            updateData.DanhSachNhiemVu = updateData.DanhSachNhiemVu.map(comp => ({
+                LoaiNhiemVu: comp.LoaiNhiemVu === 'DeThiThu' || comp.LoaiNhiemVu === 'DeThi' ? 'DeThiThu' : 'TaiLieuHocTap', 
+                MaThamChieu: comp.MaThamChieu,
+                ThuTu: comp.ThuTu
+            }));
+        }
+        
+        // Không cho đổi người phụ trách
+        delete updateData.MaGVPhuTrach;
     }
 
     const updateQuery = { $set: updateData };
     const unsetFields = {};
 
-    // TỰ ĐỘNG GHI NHẬN NGƯỜI DUYỆT LỘ TRÌNH HOẶC XÓA KHI THU HỒI
-    if (updateData.TrangThai) {
+    // GHI NHẬN NGƯỜI DUYỆT (Chỉ dành cho Quản trị viên/Giáo viên)
+    if (updateData.TrangThai && currentUser.VaiTro !== 'HocSinh') {
         if (['Hoàn thiện', 'Đã xuất bản', 'Đã từ chối', 'Từ chối'].includes(updateData.TrangThai)) {
-            updateQuery.$set.MaNguoiKiemDuyet = req.user._id;
+            updateQuery.$set.MaNguoiKiemDuyet = currentUser._id;
         } else if (updateData.TrangThai === 'Đang kiểm duyệt') {
             unsetFields.MaNguoiKiemDuyet = "";
             delete updateQuery.$set.MaNguoiKiemDuyet;
         }
     }
 
+    // LƯU LỊCH SỬ TIẾN ĐỘ VÀO MẢNG
     if (updateData.MucDoHoanThanh !== undefined) {
       updateQuery.$push = {
         LichSuTienDo: {
@@ -244,7 +296,7 @@ exports.update = async (req, res) => {
         : updateQuery;
 
     const item = await LoTrinhHocTap.findByIdAndUpdate(id, finalUpdateQuery, { new: true, runValidators: true });
-    if (!item) return res.status(404).json({ message: "Không tìm thấy lộ trình" });
+    
     res.json(item);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -253,7 +305,20 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    await LoTrinhHocTap.deleteById(req.params.id, req.user._id);
+    // BẢO MẬT: Kiểm tra vai trò từ DB
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro === 'HocSinh') {
+        return res.status(403).json({ message: "Từ chối truy cập." });
+    }
+
+    const existingItem = await LoTrinhHocTap.findById(req.params.id);
+    if (!existingItem) return res.status(404).json({ message: "Không tìm thấy lộ trình." });
+
+    if (currentUser.VaiTro !== 'QuanTriVien' && existingItem.MaGVPhuTrach.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({ message: "Bạn không có quyền xóa lộ trình này." });
+    }
+
+    await LoTrinhHocTap.deleteById(req.params.id, currentUser._id);
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });

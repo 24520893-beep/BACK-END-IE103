@@ -1,9 +1,17 @@
 const CauHoi = require('../models/CauHoi');
+const NguoiDung = require('../models/NguoiDung'); // Bổ sung model NguoiDung để lấy VaiTro thực tế
 const mongoose = require('mongoose');
+
+// ==========================================
+// THÙNG RÁC CÂU HỎI
+// ==========================================
 
 exports.getTrash = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Lấy người dùng trực tiếp từ DB
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 12;
         const search = req.query.search || '';
@@ -38,12 +46,16 @@ exports.getTrash = async (req, res) => {
 
 exports.restore = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Lấy người dùng trực tiếp từ DB
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const { id } = req.params;
 
         const item = await CauHoi.findOneDeleted({ _id: id });
         if (!item) return res.status(404).json({ message: "Không tìm thấy câu hỏi trong thùng rác." });
 
+        // Chặn quyền nếu không phải Admin và không phải chủ sở hữu câu hỏi
         if (currentUser.VaiTro !== 'QuanTriVien' && item.MaGVBienSoan.toString() !== currentUser._id.toString()) {
             return res.status(403).json({ message: "Bạn không có quyền khôi phục câu hỏi này." });
         }
@@ -57,12 +69,16 @@ exports.restore = async (req, res) => {
 
 exports.forceDelete = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Lấy người dùng trực tiếp từ DB
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const { id } = req.params;
 
         const item = await CauHoi.findOneDeleted({ _id: id });
         if (!item) return res.status(404).json({ message: "Không tìm thấy câu hỏi trong thùng rác." });
 
+        // Chặn quyền nếu không phải Admin và không phải chủ sở hữu câu hỏi
         if (currentUser.VaiTro !== 'QuanTriVien' && item.MaGVBienSoan.toString() !== currentUser._id.toString()) {
             return res.status(403).json({ message: "Bạn không có quyền xóa vĩnh viễn câu hỏi này." });
         }
@@ -74,9 +90,14 @@ exports.forceDelete = async (req, res) => {
     }
 };
 
+// ==========================================
+// LẤY DANH SÁCH & CHI TIẾT CÂU HỎI
+// ==========================================
+
 exports.getAll = async (req, res) => {
   try {
-    const currentUser = req.user;
+    // BẢO MẬT: Lấy người dùng trực tiếp từ DB
+    const currentUser = await NguoiDung.findById(req.user._id);
     if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
 
     const currentUserId = new mongoose.Types.ObjectId(currentUser._id);
@@ -89,7 +110,7 @@ exports.getAll = async (req, res) => {
     if (type && type !== 'Tất cả') filter.LoaiCauHoi = type;
     if (difficulty && difficulty !== 'Tất cả') filter.DoKho = difficulty;
 
-    // Phân quyền hiển thị (Giữ nguyên logic cũ của bạn)
+    // Phân quyền hiển thị theo Role thực tế
     if (currentUser.VaiTro === 'HocSinh') {
       filter.TrangThai = { $in: ['Đã xuất bản', 'Hoàn thiện'] };
     } else {
@@ -156,8 +177,18 @@ exports.getById = async (req, res) => {
   }
 };
 
+// ==========================================
+// TẠO MỚI CÂU HỎI
+// ==========================================
+
 exports.create = async (req, res) => {
   try {
+    // BẢO MẬT: Lấy người dùng trực tiếp từ DB để kiểm tra Role
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro === 'HocSinh') {
+        return res.status(403).json({ message: "Từ chối truy cập. Chỉ Giáo viên hoặc Quản trị viên mới được tạo câu hỏi." });
+    }
+
     let {
       LoaiCauHoi, NoiDungCauHoi, MonHoc, ChuyenDe, DoKho,
       DanhSachLuaChon, DapAnChinhXac, DapAnGoiY
@@ -170,7 +201,7 @@ exports.create = async (req, res) => {
 
     const cauHoiData = {
       LoaiCauHoi, NoiDungCauHoi, MonHoc, ChuyenDe, DoKho,
-      MaGVBienSoan: req.user?._id
+      MaGVBienSoan: currentUser._id // Gán chính xác ID người tạo từ DB
     };
 
     // 2. BẮT LINK ẢNH NẾU CÓ UPLOAD
@@ -200,9 +231,29 @@ exports.create = async (req, res) => {
   }
 };
 
+// ==========================================
+// CẬP NHẬT CÂU HỎI
+// ==========================================
+
 exports.update = async (req, res) => {
   try {
+    // BẢO MẬT: Lấy người dùng trực tiếp từ DB
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro === 'HocSinh') {
+        return res.status(403).json({ message: "Từ chối truy cập." });
+    }
+
     const { id } = req.params;
+    
+    // BẢO MẬT: Kiểm tra câu hỏi có tồn tại và xem ai là chủ sở hữu
+    const existingItem = await CauHoi.findById(id);
+    if (!existingItem) return res.status(404).json({ message: "Không tìm thấy câu hỏi" });
+
+    // Chỉ Admin HOẶC chủ sở hữu mới được sửa
+    if (currentUser.VaiTro !== 'QuanTriVien' && existingItem.MaGVBienSoan.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({ message: "Bạn không có quyền sửa câu hỏi này." });
+    }
+
     const updateData = { ...req.body };
 
     // 1. ÉP KIỂU LẠI MẢNG NẾU CÓ CẬP NHẬT TỪ FORMDATA
@@ -215,6 +266,7 @@ exports.update = async (req, res) => {
         updateData.HinhAnhMinhHoa = req.file.path;
     }
 
+    // Bảo mật: Không cho phép sửa đổi người tạo
     delete updateData.MaGVBienSoan;
 
     const updateFields = { $set: updateData };
@@ -234,7 +286,7 @@ exports.update = async (req, res) => {
     // TỰ ĐỘNG GHI NHẬN NGƯỜI DUYỆT CÂU HỎI HOẶC XÓA KHI THU HỒI
     if (updateData.TrangThai) {
       if (['Hoàn thiện', 'Đã xuất bản', 'Đã từ chối', 'Từ chối'].includes(updateData.TrangThai)) {
-        updateFields.$set.MaNguoiKiemDuyet = req.user._id;
+        updateFields.$set.MaNguoiKiemDuyet = currentUser._id;
       } else if (updateData.TrangThai === 'Đang kiểm duyệt') {
         unsetFields.MaNguoiKiemDuyet = "";
         delete updateFields.$set.MaNguoiKiemDuyet;
@@ -251,16 +303,36 @@ exports.update = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    if (!item) return res.status(404).json({ message: "Không tìm thấy câu hỏi" });
     res.json(item);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
+// ==========================================
+// XÓA (MỀM) CÂU HỎI
+// ==========================================
+
 exports.remove = async (req, res) => {
   try {
-    await CauHoi.deleteById(req.params.id, req.user._id);
+    // BẢO MẬT: Lấy người dùng trực tiếp từ DB
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro === 'HocSinh') {
+        return res.status(403).json({ message: "Từ chối truy cập." });
+    }
+
+    const { id } = req.params;
+    
+    // BẢO MẬT: Kiểm tra xem ai đang xóa
+    const existingItem = await CauHoi.findById(id);
+    if (!existingItem) return res.status(404).json({ message: "Không tìm thấy câu hỏi" });
+
+    // Chỉ Admin HOẶC chủ sở hữu mới được xóa
+    if (currentUser.VaiTro !== 'QuanTriVien' && existingItem.MaGVBienSoan.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({ message: "Bạn không có quyền xóa câu hỏi này." });
+    }
+
+    await CauHoi.deleteById(id, currentUser._id);
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });

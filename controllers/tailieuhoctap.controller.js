@@ -1,4 +1,5 @@
 const TaiLieuHocTap = require('../models/TaiLieuHocTap');
+const NguoiDung = require('../models/NguoiDung'); // Thêm NguoiDung để lấy vai trò thực tế
 const mongoose = require('mongoose');
 
 // ==========================================
@@ -7,15 +8,16 @@ const mongoose = require('mongoose');
 
 exports.getTrash = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Kiểm tra vai trò thực tế
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 12;
         const search = req.query.search || '';
 
-        // Chỉ query những document đã bị soft delete
         let filter = { deleted: true };
 
-        // Tìm kiếm theo tên
         if (search) filter.TenTaiLieu = { $regex: search, $options: 'i' };
 
         // Phân quyền: Giáo viên chỉ xem rác của mình, Admin xem tất cả
@@ -23,12 +25,11 @@ exports.getTrash = async (req, res) => {
             filter.MaGVDangTai = currentUser._id;
         }
 
-        // mongoose-delete cung cấp hàm countDocumentsDeleted và findDeleted
         const totalItems = await TaiLieuHocTap.countDocumentsDeleted(filter);
         const items = await TaiLieuHocTap.findDeleted(filter)
             .skip((page - 1) * limit)
             .limit(limit)
-            .sort({ NgayXoa: -1 }); // Ưu tiên rác mới xóa lên đầu
+            .sort({ NgayXoa: -1 }); 
 
         res.status(200).json({
             data: items,
@@ -43,19 +44,20 @@ exports.getTrash = async (req, res) => {
 
 exports.restore = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Kiểm tra vai trò thực tế
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const { id } = req.params;
 
-        // Dùng findOneDeleted để tìm cả trong thùng rác
         const item = await TaiLieuHocTap.findOneDeleted({ _id: id });
         if (!item) return res.status(404).json({ message: "Không tìm thấy dữ liệu trong thùng rác." });
 
-        // Kiểm tra quyền (Admin hoặc Chủ sở hữu)
+        // Kiểm tra quyền 
         if (currentUser.VaiTro !== 'QuanTriVien' && item.MaGVDangTai.toString() !== currentUser._id.toString()) {
             return res.status(403).json({ message: "Bạn không có quyền khôi phục mục này." });
         }
 
-        // Gọi hàm restore() của mongoose-delete
         await item.restore();
         res.status(200).json({ message: "Khôi phục thành công." });
     } catch (error) {
@@ -65,7 +67,10 @@ exports.restore = async (req, res) => {
 
 exports.forceDelete = async (req, res) => {
     try {
-        const currentUser = req.user;
+        // BẢO MẬT: Kiểm tra vai trò thực tế
+        const currentUser = await NguoiDung.findById(req.user._id);
+        if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
+
         const { id } = req.params;
 
         const item = await TaiLieuHocTap.findOneDeleted({ _id: id });
@@ -76,7 +81,6 @@ exports.forceDelete = async (req, res) => {
             return res.status(403).json({ message: "Bạn không có quyền xóa vĩnh viễn mục này." });
         }
 
-        // Xóa hoàn toàn khỏi Collection bằng deleteOne()
         await TaiLieuHocTap.deleteOne({ _id: id });
         res.status(200).json({ message: "Đã xóa vĩnh viễn." });
     } catch (error) {
@@ -84,14 +88,14 @@ exports.forceDelete = async (req, res) => {
     }
 };
 
-
 // ==========================================
 // 2. CÁC HÀM XỬ LÝ DỮ LIỆU CHÍNH
 // ==========================================
 
 exports.getAll = async (req, res) => {
   try {
-    const currentUser = req.user;
+    // BẢO MẬT: Kiểm tra vai trò thực tế
+    const currentUser = await NguoiDung.findById(req.user._id);
     if (!currentUser) return res.status(401).json({ message: "Không tìm thấy thông tin người dùng." });
 
     const currentUserId = new mongoose.Types.ObjectId(currentUser._id);
@@ -111,6 +115,7 @@ exports.getAll = async (req, res) => {
       if (status && status !== 'Tất cả') {
         filter.TrangThai = (status === 'Hoàn thiện' || status === 'Đã xuất bản') ? { $in: ['Đã xuất bản', 'Hoàn thiện'] } :
           (status === 'Từ chối' || status === 'Đã từ chối') ? { $in: ['Đã từ chối', 'Từ chối'] } : status;
+        
         if (currentUser.VaiTro !== 'QuanTriVien' || (status !== 'Đang kiểm duyệt' && status !== 'Chờ duyệt')) {
           filter.$or = [{ MaGVDangTai: currentUserId }, { MaNguoiKiemDuyet: currentUserId }];
         }
@@ -190,22 +195,25 @@ exports.getById = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
-    // Dữ liệu gửi qua FormData dạng mảng/object sẽ bị ép thành chuỗi (String)
+    // BẢO MẬT: Kiểm tra vai trò thực tế
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro === 'HocSinh') {
+        return res.status(403).json({ message: "Chỉ Giáo viên hoặc Quản trị viên mới được phép đăng tài liệu." });
+    }
+
     const { TenTaiLieu, DinhDang, MonHoc, DanhSachNhanDan } = req.body;
 
     const docData = {
       TenTaiLieu,
-      MaGVDangTai: req.user?._id,
+      MaGVDangTai: currentUser._id, // Cố định bằng ID query từ DB
       DinhDang,
       MonHoc
     };
 
-    // NẾU CÓ UPLOAD FILE, CLOUDINARY TRẢ LINK VỀ QUA req.file.path
     if (req.file) {
       docData.DuongDan = req.file.path;
     }
 
-    // Parse lại chuỗi JSON của mảng nhãn dán
     if (DanhSachNhanDan && typeof DanhSachNhanDan === 'string') {
       docData.DanhSachNhanDan = JSON.parse(DanhSachNhanDan);
     }
@@ -221,17 +229,29 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
+    // BẢO MẬT: Kiểm tra vai trò thực tế
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro === 'HocSinh') {
+        return res.status(403).json({ message: "Từ chối truy cập." });
+    }
+
     const { id } = req.params;
+    
+    // BẢO MẬT: Kiểm tra tài liệu tồn tại và quyền sở hữu
+    const existingItem = await TaiLieuHocTap.findById(id);
+    if (!existingItem) return res.status(404).json({ message: "Tài liệu không tồn tại" });
+
+    if (currentUser.VaiTro !== 'QuanTriVien' && existingItem.MaGVDangTai.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({ message: "Bạn không có quyền sửa tài liệu này." });
+    }
+
     const updateData = { ...req.body };
+    delete updateData.MaGVDangTai; // Không cho phép đổi người đăng
 
-    delete updateData.MaGVDangTai;
-
-    // BẮT LẠI FILE NẾU NGƯỜI DÙNG UPLOAD FILE MỚI KHI UPDATE
     if (req.file) {
       updateData.DuongDan = req.file.path;
     }
 
-    // PARSE LẠI CHUỖI TAGS KHI GỬI BẰNG FORMDATA
     if (updateData.DanhSachNhanDan && typeof updateData.DanhSachNhanDan === 'string') {
       updateData.DanhSachNhanDan = JSON.parse(updateData.DanhSachNhanDan);
     }
@@ -241,9 +261,8 @@ exports.update = async (req, res) => {
     // TỰ ĐỘNG GHI NHẬN NGƯỜI DUYỆT BÀI / TỪ CHỐI
     if (updateData.TrangThai) {
       if (['Hoàn thiện', 'Đã xuất bản', 'Đã từ chối', 'Từ chối'].includes(updateData.TrangThai)) {
-        updateQuery.$set.MaNguoiKiemDuyet = req.user._id;
+        updateQuery.$set.MaNguoiKiemDuyet = currentUser._id;
       } else if (updateData.TrangThai === 'Đang kiểm duyệt') {
-        // Nếu thu hồi lại về trạng thái chờ duyệt thì xóa dấu vết người duyệt cũ
         updateQuery.$unset = { MaNguoiKiemDuyet: "" };
         delete updateQuery.$set.MaNguoiKiemDuyet;
       }
@@ -255,7 +274,6 @@ exports.update = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    if (!item) return res.status(404).json({ message: "Tài liệu không tồn tại" });
     res.json(item);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -264,8 +282,23 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    // Soft delete do thư viện mongoose-delete cung cấp
-    await TaiLieuHocTap.deleteById(req.params.id, req.user._id);
+    // BẢO MẬT: Kiểm tra vai trò thực tế
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro === 'HocSinh') {
+        return res.status(403).json({ message: "Từ chối truy cập." });
+    }
+
+    const { id } = req.params;
+
+    const existingItem = await TaiLieuHocTap.findById(id);
+    if (!existingItem) return res.status(404).json({ message: "Tài liệu không tồn tại" });
+
+    if (currentUser.VaiTro !== 'QuanTriVien' && existingItem.MaGVDangTai.toString() !== currentUser._id.toString()) {
+        return res.status(403).json({ message: "Bạn không có quyền xóa tài liệu này." });
+    }
+
+    // Soft delete
+    await TaiLieuHocTap.deleteById(id, currentUser._id);
     res.json({ message: 'Deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
