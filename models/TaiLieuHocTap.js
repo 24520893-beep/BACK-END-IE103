@@ -47,5 +47,11 @@ TaiLieuHocTapSchema.plugin(mongooseDelete, {
 });
 
 TaiLieuHocTapSchema.path('deletedAt').options.name = 'NgayXoa';
+
+// Tạo một index tự động xóa bản ghi sau 30 ngày (2592000 giây) kể từ ngày NgayXoa
+TaiLieuHocTapSchema.index(
+  { NgayXoa: 1 }, 
+  { expireAfterSeconds: 2592000, partialFilterExpression: { deleted: true } }
+);
  
 module.exports = mongoose.model('TaiLieuHocTap', TaiLieuHocTapSchema);

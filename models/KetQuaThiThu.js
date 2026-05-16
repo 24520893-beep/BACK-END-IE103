@@ -8,7 +8,10 @@ const ChiTietBaiLamSchema = new mongoose.Schema({
     required: true 
   },
   LuaChonCuaHocSinh: { type: String }, 
-  KetQuaDungSai: { type: Boolean, required: true } // Yêu cầu xác định rõ đúng hay sai
+  KetQuaDungSai: { type: Boolean, required: true },
+  
+  // Tinh gọn: Không dùng default. Chỉ lưu dữ liệu này khi là câu Tự Luận
+  DiemDatDuoc: { type: Number } 
 }, { _id: false });
 
 const KetQuaThiThuSchema = new mongoose.Schema({
@@ -24,11 +27,7 @@ const KetQuaThiThuSchema = new mongoose.Schema({
   },
 
   DiemSo: { type: Number, required: true, min: 0 },
-  
-  // Loại bỏ default: "" để tiết kiệm dung lượng nếu chưa có nhận xét
   DanhGiaKienThuc: { type: String, trim: true }, 
-
-  // Mảng chi tiết chỉ tồn tại nếu có dữ liệu
   ChiTietBaiLam: [ChiTietBaiLamSchema]
 }, {
   collection: 'KETQUATHITHU',

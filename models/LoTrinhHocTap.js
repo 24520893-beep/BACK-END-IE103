@@ -46,4 +46,10 @@ const LoTrinhHocTapSchema = new mongoose.Schema({
 LoTrinhHocTapSchema.plugin(mongooseDelete, { deletedAt: true, deletedBy: true, overrideMethods: 'all' });
 LoTrinhHocTapSchema.path('deletedAt').options.name = 'NgayXoa';
 
+// Tạo một index tự động xóa bản ghi sau 30 ngày (2592000 giây) kể từ ngày NgayXoa
+LoTrinhHocTapSchema.index(
+  { NgayXoa: 1 }, 
+  { expireAfterSeconds: 2592000, partialFilterExpression: { deleted: true } }
+);
+
 module.exports = mongoose.model('LoTrinhHocTap', LoTrinhHocTapSchema);
