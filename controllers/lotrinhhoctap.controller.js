@@ -324,3 +324,28 @@ exports.remove = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// ==========================================
+// API PUBLIC LẤY LỘ TRÌNH TIÊU BIỂU CHO TRANG CHỦ
+// ==========================================
+exports.getPublicFeatured = async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 8;
+
+        // Lọc: Không bị xóa, Không có mã học sinh (Lộ trình chung), Trạng thái Đã xuất bản/Hoàn thiện
+        const filter = {
+            deleted: { $ne: true },
+            $or: [{ MaHocSinh: { $exists: false } }, { MaHocSinh: null }],
+            TrangThai: { $in: ['Đã xuất bản', 'Hoàn thiện'] }
+        };
+
+        const items = await LoTrinhHocTap.find(filter)
+            .populate('MaGVPhuTrach', 'HoTen') // Lấy tên giáo viên thiết kế
+            .sort({ NgayTao: -1 }) // Ưu tiên mới nhất
+            .limit(limit);
+
+        res.status(200).json({ data: items });
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi hệ thống khi lấy lộ trình tiêu biểu", error: error.message });
+    }
+};

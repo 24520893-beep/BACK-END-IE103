@@ -115,4 +115,4 @@ exports.getReviewKetQuaChoHocSinh = async (req, res) => {
 };
 exports.getTienDoNhiemVuHomNay = getSecuredView('View_TienDo_NhiemVu_HomNay', true);
 exports.getPhanTichMucTieuThucTe = getSecuredView('View_PhanTichMucTieu_ThucTe', true);
-exports.getCanhBaoHocSinh = getSecuredView('View_CanhBao_HocSinh', true);
+exports.getCanhBaoHocSinh = getSecuredView('View_CanhBao_HocSinh', false);
