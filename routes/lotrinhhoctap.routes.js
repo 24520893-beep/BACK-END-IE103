@@ -17,7 +17,7 @@ router.get('/', auth, controller.getAll);
 router.get('/:id', auth, controller.getById);
 
 router.post('/', auth, rbac('GiaoVien', 'QuanTriVien'), controller.create);
-router.put('/:id', auth, rbac('GiaoVien', 'QuanTriVien'), controller.update);
+router.put('/:id', auth, controller.update);
 router.delete('/:id', auth, rbac('GiaoVien', 'QuanTriVien'), controller.remove);
 
 module.exports = router;

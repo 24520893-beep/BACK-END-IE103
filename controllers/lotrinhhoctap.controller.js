@@ -272,15 +272,30 @@ exports.update = async (req, res) => {
 
     // TÁCH QUYỀN SỬA ĐỔI RÕ RÀNG
     if (currentUser.VaiTro === 'HocSinh') {
-      // Học sinh chỉ được phép cập nhật Tiến độ (Mức độ hoàn thành), không được sửa nội dung
-      if (existingItem.MaHocSinh.toString() !== currentUser._id.toString()) {
-        return res.status(403).json({ message: "Bạn không có quyền cập nhật lộ trình này." });
-      }
-      updateData = {
-        MucDoHoanThanh: updateData.MucDoHoanThanh,
-        NhiemVuHoanThanh: updateData.NhiemVuHoanThanh
-      };
-    } else {
+  if (existingItem.MaHocSinh.toString() !== currentUser._id.toString()) {
+    return res.status(403).json({ message: "Bạn không có quyền cập nhật lộ trình này." });
+  }
+
+  updateData = {
+    MucDoHoanThanh: req.body.MucDoHoanThanh,
+    NhiemVuHoanThanh: req.body.NhiemVuHoanThanh
+  };
+
+  // Xác định tiến độ hiện tại từ LichSuTienDo cuối (source of truth)
+  const lastEntry = existingItem.LichSuTienDo?.at(-1);
+  const currentDone = lastEntry?.NhiemVuHoanThanh ?? existingItem.NhiemVuHoanThanh ?? 0;
+  const currentPct  = lastEntry?.MucDoHoanThanh  ?? existingItem.MucDoHoanThanh  ?? 0;
+
+  if (
+    (updateData.NhiemVuHoanThanh !== undefined && updateData.NhiemVuHoanThanh < currentDone) ||
+    (updateData.MucDoHoanThanh   !== undefined && updateData.MucDoHoanThanh   < currentPct)
+  ) {
+    return res.status(400).json({
+      message: "Tiến độ không thể giảm xuống thấp hơn giá trị hiện tại."
+    });
+  }
+}
+ else {
       // Giáo viên / Quản trị viên
       if (currentUser.VaiTro !== 'QuanTriVien' && existingItem.MaGVPhuTrach.toString() !== currentUser._id.toString()) {
         return res.status(403).json({ message: "Bạn không có quyền sửa lộ trình này." });

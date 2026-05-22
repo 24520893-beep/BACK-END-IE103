@@ -1,6 +1,7 @@
 const KetQuaThiThu = require('../models/KetQuaThiThu');
 const DeThiThu = require('../models/DeThiThu');
 const NguoiDung = require('../models/NguoiDung'); 
+const LoTrinhHocTap = require('../models/LoTrinhHocTap');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -101,7 +102,9 @@ exports.checkByExam = async (req, res) => {
       MaHocSinh: currentUser._id,
       MaDeThi: examId,
       deleted: { $ne: true }
-    }).select('_id DiemSo NgayTao');
+    })
+    .sort({ DiemSo: -1 }) // THÊM DÒNG NÀY: Ưu tiên lấy kết quả cao điểm nhất
+    .select('_id DiemSo NgayTao');
 
     if (!ketQua) {
       return res.status(404).json({ existed: false, message: "Chưa có kết quả thi." });
@@ -264,6 +267,51 @@ Yêu cầu định dạng trả về là JSON thuần túy (không bọc trong \
 
     const newKetQua = new KetQuaThiThu(ketQuaData);
     await newKetQua.save();
+
+    try {
+        if (tongDiemHienTai >= 5) {
+            // Tìm các lộ trình hợp lệ của học sinh này
+            const loTrinhList = await LoTrinhHocTap.find({
+                MaHocSinh: currentUser._id,
+                TrangThai: { $in: ['Đã xuất bản', 'Hoàn thiện'] },
+                deleted: { $ne: true }
+            });
+
+            for (const lt of loTrinhList) {
+                const lastEntry = lt.LichSuTienDo?.at(-1);
+                const currentDone = lastEntry?.NhiemVuHoanThanh ?? lt.NhiemVuHoanThanh ?? 0;
+                const totalTasks = lt.DanhSachNhiemVu.length;
+
+                // Nếu lộ trình chưa hoàn thành hết
+                if (currentDone < totalTasks) {
+                    const currentTask = lt.DanhSachNhiemVu[currentDone];
+                    
+                    // Kiểm tra xem nhiệm vụ "đang chờ làm (currentDone)" có KHỚP với bài thi vừa nộp không
+                    if (currentTask.LoaiNhiemVu === 'DeThiThu' && currentTask.MaThamChieu.toString() === MaDeThi.toString()) {
+                        const newDoneCount = currentDone + 1;
+                        const newPercentage = newDoneCount >= totalTasks ? 100 : Math.floor((newDoneCount / totalTasks) * 100);
+
+                        // Cập nhật tiến độ vào DB
+                        await LoTrinhHocTap.findByIdAndUpdate(lt._id, {
+                            MucDoHoanThanh: newPercentage,
+                            NhiemVuHoanThanh: newDoneCount,
+                            $push: {
+                                LichSuTienDo: {
+                                    NgayGhiNhan: new Date(),
+                                    MucDoHoanThanh: newPercentage,
+                                    NhiemVuHoanThanh: newDoneCount
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    } catch (updateProgressError) {
+        console.error("Lỗi tự động cập nhật lộ trình:", updateProgressError);
+        // Không return lỗi ở đây để học sinh vẫn nhận được điểm thi bình thường
+    }
+    // ====================================================================
 
     res.status(201).json({
         ...newKetQua._doc,
