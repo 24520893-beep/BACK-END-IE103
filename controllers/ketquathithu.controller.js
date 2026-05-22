@@ -89,6 +89,30 @@ exports.getById = async (req, res) => {
   }
 };
 
+// Thêm vào cuối file, trước module.exports cuối cùng
+exports.checkByExam = async (req, res) => {
+  try {
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser) return res.status(401).json({ message: "Không tìm thấy người dùng." });
+
+    const { examId } = req.params;
+
+    const ketQua = await KetQuaThiThu.findOne({
+      MaHocSinh: currentUser._id,
+      MaDeThi: examId,
+      deleted: { $ne: true }
+    }).select('_id DiemSo NgayTao');
+
+    if (!ketQua) {
+      return res.status(404).json({ existed: false, message: "Chưa có kết quả thi." });
+    }
+
+    res.json({ existed: true, ketQua });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi hệ thống", error: error.message });
+  }
+};
+
 exports.create = async (req, res) => {
   try {
     const currentUser = await NguoiDung.findById(req.user._id);

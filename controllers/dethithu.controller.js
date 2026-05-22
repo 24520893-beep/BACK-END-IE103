@@ -101,13 +101,35 @@ exports.getAllExams = async (req, res) => {
     const currentUserId = new mongoose.Types.ObjectId(currentUser._id);
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 12; 
-    const { search, subject, status } = req.query;
+    
+    // Nhận thêm tham số examType từ Front-end
+    const { search, subject, status, examType } = req.query;
 
     let filter = { deleted: { $ne: true } };
     if (search) filter.TenDeThi = { $regex: search, $options: 'i' };
-    if (subject && subject !== 'Tất cả') filter.MonHoc = subject;
 
-    // Logic phân quyền hiển thị
+    // ========================================
+    // LOGIC LỌC MỚI: PHÂN TÁCH THPT vs ĐGNL
+    // ========================================
+    if (examType === 'DGNL') {
+        // Lọc các đề thi KHÔNG CÓ môn học
+        filter.$or = [{ MonHoc: { $exists: false } }, { MonHoc: null }, { MonHoc: "" }];
+    } else if (examType === 'THPT') {
+        // Lọc các đề thi BẮT BUỘC CÓ môn học
+        filter.MonHoc = { $exists: true, $ne: "", $ne: null };
+        if (subject && subject !== 'Tất cả') {
+            filter.MonHoc = subject; 
+        }
+    } else {
+        // Trường hợp 'Tất cả', nếu có chọn cụ thể môn học thì lọc môn đó
+        if (subject && subject !== 'Tất cả') {
+            filter.MonHoc = subject;
+        }
+    }
+
+    // ========================================
+    // LOGIC PHÂN QUYỀN HIỂN THỊ
+    // ========================================
     if (currentUser.VaiTro === 'HocSinh') {
         filter.TrangThai = { $in: ['Đã xuất bản', 'Hoàn thiện'] };
     } else {
@@ -115,12 +137,22 @@ exports.getAllExams = async (req, res) => {
             filter.TrangThai = (status === 'Hoàn thiện' || status === 'Đã xuất bản') ? { $in: ['Đã xuất bản', 'Hoàn thiện'] } : 
                               (status === 'Từ chối' || status === 'Đã từ chối') ? { $in: ['Đã từ chối', 'Từ chối'] } : status;
             
-            // Nếu không phải Admin, hoặc đang xem danh sách đã duyệt/từ chối thì chỉ thấy bài liên quan đến mình
             if (currentUser.VaiTro !== 'QuanTriVien' || (status !== 'Đang kiểm duyệt' && status !== 'Chờ duyệt')) {
-                filter.$or = [{ MaGVThietKe: currentUserId }, { MaNguoiKiemDuyet: currentUserId }];
+                // Bọc bằng $and để không đè thuộc tính $or của phần lọc DGNL bên trên
+                filter = {
+                    $and: [
+                        filter,
+                        { $or: [{ MaGVThietKe: currentUserId }, { MaNguoiKiemDuyet: currentUserId }] }
+                    ]
+                };
             }
         } else {
-            filter.$or = [{ TrangThai: { $in: ['Đã xuất bản', 'Hoàn thiện'] } }, { MaGVThietKe: currentUserId }];
+            filter = {
+                $and: [
+                    filter,
+                    { $or: [{ TrangThai: { $in: ['Đã xuất bản', 'Hoàn thiện'] } }, { MaGVThietKe: currentUserId }] }
+                ]
+            };
         }
     }
 
@@ -183,7 +215,6 @@ exports.getAllExams = async (req, res) => {
   }
 };
 
-// File: controllers/dethithu.controller.js
 exports.getById = async (req, res) => {
   try {
     // BẢO MẬT: Kiểm tra vai trò thực tế từ DB
@@ -223,9 +254,13 @@ exports.create = async (req, res) => {
     const deThiData = {
       TenDeThi,
       ThoiGianGioiHan,
-      MonHoc,
       MaGVThietKe: currentUser._id // Ép cứng người tạo là người gửi Request
     };
+
+    // LOGIC: NẾU LÀ THPT THÌ LƯU MÔN HỌC, NẾU ĐGNL THÌ BỎ QUA
+    if (MonHoc && MonHoc.trim() !== "") {
+        deThiData.MonHoc = MonHoc.trim();
+    }
 
     if (DanhSachNhanDan && DanhSachNhanDan.length > 0) deThiData.DanhSachNhanDan = DanhSachNhanDan;
     if (DanhSachCauHoi && DanhSachCauHoi.length > 0) deThiData.DanhSachCauHoi = DanhSachCauHoi;
@@ -264,15 +299,27 @@ exports.update = async (req, res) => {
     delete updateData.MaGVThietKe;
 
     const updateQuery = { $set: updateData };
+    updateQuery.$unset = {};
+
+    // LOGIC: Tự động GỠ BỎ trường MonHoc nếu người dùng chuyển loại đề sang ĐGNL
+    if (updateData.MonHoc === "" || updateData.MonHoc === null) {
+        delete updateQuery.$set.MonHoc;
+        updateQuery.$unset.MonHoc = "";
+    }
 
     // TỰ ĐỘNG GHI NHẬN NGƯỜI DUYỆT ĐỀ THI HOẶC XÓA KHI THU HỒI
     if (updateData.TrangThai) {
         if (['Hoàn thiện', 'Đã xuất bản', 'Đã từ chối', 'Từ chối'].includes(updateData.TrangThai)) {
             updateQuery.$set.MaNguoiKiemDuyet = currentUser._id;
         } else if (updateData.TrangThai === 'Đang kiểm duyệt') {
-            updateQuery.$unset = { MaNguoiKiemDuyet: "" };
+            updateQuery.$unset.MaNguoiKiemDuyet = "";
             delete updateQuery.$set.MaNguoiKiemDuyet;
         }
+    }
+
+    // Xóa object $unset nếu nó rỗng để tránh lỗi query MongoDB
+    if (Object.keys(updateQuery.$unset).length === 0) {
+        delete updateQuery.$unset;
     }
 
     const item = await DeThiThu.findByIdAndUpdate(

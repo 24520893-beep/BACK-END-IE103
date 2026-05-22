@@ -9,6 +9,7 @@ const uploadCloud = require('../config/cloudinary');
 
 router.get('/', auth, controller.getAll);
 router.get('/:id', auth, controller.getById);
+router.get('/check-exam/:examId', auth, controller.checkByExam);
 
 // ĐÃ THÊM: uploadCloud.any() để hứng toàn bộ file đính kèm gửi lên
 router.post('/', auth, rbac('HocSinh'), uploadCloud.any(), controller.create);

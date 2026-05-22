@@ -4,7 +4,7 @@ const mongooseDelete = require('mongoose-delete');
 const DeThiThuSchema = new mongoose.Schema({
   TenDeThi: { type: String, required: true, trim: true },
   ThoiGianGioiHan: { type: Number, required: true }, 
-  MonHoc: { type: String, required: true },
+  MonHoc: { type: String },
   
   TrangThai: { 
     type: String, 
