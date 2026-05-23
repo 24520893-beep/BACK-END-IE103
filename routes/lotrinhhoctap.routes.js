@@ -13,6 +13,8 @@ router.get('/thungrac', auth, controller.getTrash);
 router.put('/:id/restore', auth, controller.restore);
 router.delete('/:id/force', auth, controller.forceDelete);
 
+router.get('/nhiemvu-homnay', auth, controller.getTodayTasks);
+
 router.get('/', auth, controller.getAll);
 router.get('/:id', auth, controller.getById);
 

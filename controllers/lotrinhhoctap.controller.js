@@ -95,6 +95,42 @@ exports.forceDelete = async (req, res) => {
 // ==========================================
 // LẤY DANH SÁCH & CHI TIẾT
 // ==========================================
+// ==========================================
+// API DÀNH RIÊNG CHO WIDGET "NHIỆM VỤ HÔM NAY" (HỌC SINH)
+// ==========================================
+exports.getTodayTasks = async (req, res) => {
+  try {
+    const currentUser = await NguoiDung.findById(req.user._id);
+    if (!currentUser || currentUser.VaiTro !== 'HocSinh') {
+      return res.status(403).json({ message: "Chỉ học sinh mới có mục tiêu nhiệm vụ." });
+    }
+
+    // Lọc cực kỳ chặt chẽ: Của học sinh này + Đã duyệt + Chưa hoàn thành 100%
+    const filter = {
+      MaHocSinh: currentUser._id,
+      deleted: { $ne: true },
+      TrangThai: { $in: ['Đã xuất bản', 'Hoàn thiện'] }, // BẮT BUỘC ĐÃ KIỂM DUYỆT
+      $or: [
+        { MucDoHoanThanh: { $lt: 100 } },
+        { MucDoHoanThanh: { $exists: false } },
+        { MucDoHoanThanh: null }
+      ]
+    };
+
+    const roadmaps = await LoTrinhHocTap.find(filter)
+      .populate('MaGVPhuTrach', 'HoTen') // Lấy tên GV
+      .populate({
+        path: 'DanhSachNhiemVu.MaThamChieu',
+        select: 'TenTaiLieu TenDeThi'
+      })
+      .sort({ NgayCapNhat: -1 }) // Ưu tiên lộ trình mới tương tác gần nhất
+      .limit(5); // Chỉ lấy 5 lộ trình làm mục tiêu để không bị rối UI
+
+    res.status(200).json({ data: roadmaps });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi lấy nhiệm vụ hôm nay", error: error.message });
+  }
+};
 
 exports.getAll = async (req, res) => {
   const scope = req.query.scope || 'moderation'; // mặc định giữ hành vi cũ cho QuanLyLoTrinh
