@@ -1,52 +1,27 @@
 const express = require('express');
 const router = express.Router();
-
-// KHAI BÁO CÁC MODULE CẦN THIẾT
 const controller = require('../controllers/nguoidung.controller');
 const auth = require('../middleware/auth.middleware');
 const rbac = require('../middleware/rbac.middleware');
 const uploadCloud = require('../config/cloudinary');
 
-// ==========================================
-// CÁC ROUTE GET (Lấy dữ liệu)
-// ==========================================
-router.get('/danh-sach-gv', controller.getGiaoViens);
+// ✅ THÊM DÒNG NÀY
+const attachDb = require('../middleware/dbConnection.middleware');
 
-router.get('/danh-sach-hs', auth, rbac('GiaoVien', 'QuanTriVien'), controller.getHocSinhs);
+router.get('/danh-sach-gv', controller.getGiaoViens); // Public, không cần attachDb
+router.get('/danh-sach-hs', auth, attachDb, rbac('GiaoVien', 'QuanTriVien'), controller.getHocSinhs);
+router.get('/me', auth, attachDb, controller.getMe);
+router.get('/', auth, attachDb, rbac('QuanTriVien'), controller.getAll);
 
-router.get('/me', auth, controller.getMe); // Phải đặt trước /:id hoặc /
+router.post('/sign-up', controller.signUp); // Public
+router.post('/', auth, attachDb, rbac('QuanTriVien'), controller.create);
 
-router.get('/', auth, rbac('QuanTriVien'), controller.getAll);
+router.put('/doi-mat-khau', auth, attachDb, controller.changePassword);
+router.put('/:id', auth, attachDb, uploadCloud.single('avatar'), controller.update);
 
-
-// ==========================================
-// CÁC ROUTE POST (Tạo mới)
-// ==========================================
-router.post('/sign-up', controller.signUp); // Học sinh tự đăng ký (Public)
-
-router.post('/', auth, rbac('QuanTriVien'), controller.create); // Admin tạo Giáo viên
-
-
-// ==========================================
-// CÁC ROUTE PUT (Cập nhật)
-// ==========================================
-
-// ĐÃ SỬA LỖI TẠI ĐÂY: Dùng đúng tên biến 'auth' và 'controller' đã require ở trên
-router.put('/doi-mat-khau', auth, controller.changePassword);
-
-// Cập nhật thông tin cá nhân (Có hỗ trợ upload file tên là 'avatar')
-router.put('/:id', auth, uploadCloud.single('avatar'), controller.update);
-
-router.get('/thungrac-gv', auth, rbac('QuanTriVien'), controller.getTrashTeachers);
-
-// Khôi phục giáo viên
-router.put('/:id/restore', auth, rbac('QuanTriVien'), controller.restoreTeacher);
-
-// Xóa vĩnh viễn giáo viên
-router.delete('/:id/force', auth, rbac('QuanTriVien'), controller.forceDeleteTeacher);
-// ==========================================
-// CÁC ROUTE DELETE (Xóa)
-// ==========================================
-router.delete('/:id', auth, rbac('QuanTriVien'), controller.remove);
+router.get('/thungrac-gv', auth, attachDb, rbac('QuanTriVien'), controller.getTrashTeachers);
+router.put('/:id/restore', auth, attachDb, rbac('QuanTriVien'), controller.restoreTeacher);
+router.delete('/:id/force', auth, attachDb, rbac('QuanTriVien'), controller.forceDeleteTeacher);
+router.delete('/:id', auth, attachDb, rbac('QuanTriVien'), controller.remove);
 
 module.exports = router;

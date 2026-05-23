@@ -7,20 +7,15 @@ const rbac = require('../middleware/rbac.middleware');
 // 1. IMPORT MIDDLEWARE CLOUDINARY
 const uploadCloud = require('../config/cloudinary');
 
-// Các route liên quan đến thùng rác
-router.get('/thungrac', auth, controller.getTrash);
-router.put('/:id/restore', auth, controller.restore);
-router.delete('/:id/force', auth, controller.forceDelete);
+const attachDb = require('../middleware/dbConnection.middleware'); // ✅ THÊM
 
-// Các route truy xuất dữ liệu
-router.get('/', auth, controller.getAll);
-router.get('/:id', auth, controller.getById);
-
-// 2. CHÈN uploadCloud.single('image') VÀO ROUTE TẠO MỚI (POST) VÀ CẬP NHẬT (PUT)
-router.post('/', auth, rbac('GiaoVien', 'QuanTriVien'), uploadCloud.single('image'), controller.create);
-router.put('/:id', auth, rbac('GiaoVien', 'QuanTriVien'), uploadCloud.single('image'), controller.update);
-
-// Route xóa mềm
-router.delete('/:id', auth, rbac('GiaoVien', 'QuanTriVien'), controller.remove);
+router.get('/thungrac', auth, attachDb, controller.getTrash);
+router.put('/:id/restore', auth, attachDb, controller.restore);
+router.delete('/:id/force', auth, attachDb, controller.forceDelete);
+router.get('/', auth, attachDb, controller.getAll);
+router.get('/:id', auth, attachDb, controller.getById);
+router.post('/', auth, attachDb, rbac('GiaoVien', 'QuanTriVien'), uploadCloud.single('image'), controller.create);
+router.put('/:id', auth, attachDb, rbac('GiaoVien', 'QuanTriVien'), uploadCloud.single('image'), controller.update);
+router.delete('/:id', auth, attachDb, rbac('GiaoVien', 'QuanTriVien'), controller.remove);
 
 module.exports = router;

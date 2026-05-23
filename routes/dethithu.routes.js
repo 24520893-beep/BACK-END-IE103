@@ -4,18 +4,15 @@ const controller = require('../controllers/dethithu.controller');
 const auth = require('../middleware/auth.middleware');
 const rbac = require('../middleware/rbac.middleware');
 
-// Đã sửa 'verifyToken' thành 'auth' và 'taiLieuController' thành 'controller'
-router.get('/thungrac', auth, controller.getTrash);
-router.put('/:id/restore', auth, controller.restore);
-router.delete('/:id/force', auth, controller.forceDelete);
+const attachDb = require('../middleware/dbConnection.middleware'); // ✅ THÊM
 
-// TẤT CẢ các thao tác đều yêu cầu phải có tài khoản (auth)
-router.get('/', auth, controller.getAllExams); // Xem danh sách đề thi
-router.get('/:id', auth, controller.getById); // Xem chi tiết 1 đề thi
-
-// Các quyền quản trị dành riêng cho Giáo viên
-router.post('/', auth, rbac('GiaoVien' , 'QuanTriVien'), controller.create);
-router.put('/:id', auth, rbac('GiaoVien' , 'QuanTriVien'), controller.update);
-router.delete('/:id', auth, rbac('GiaoVien', 'QuanTriVien'), controller.remove);
+router.get('/thungrac', auth, attachDb, controller.getTrash);
+router.put('/:id/restore', auth, attachDb, controller.restore);
+router.delete('/:id/force', auth, attachDb, controller.forceDelete);
+router.get('/', auth, attachDb, controller.getAllExams);
+router.get('/:id', auth, attachDb, controller.getById);
+router.post('/', auth, attachDb, rbac('GiaoVien', 'QuanTriVien'), controller.create);
+router.put('/:id', auth, attachDb, rbac('GiaoVien', 'QuanTriVien'), controller.update);
+router.delete('/:id', auth, attachDb, rbac('GiaoVien', 'QuanTriVien'), controller.remove);
 
 module.exports = router;
